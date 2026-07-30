@@ -50,7 +50,7 @@ def detect_labels(photo, bucket):
     return len(response['Labels'])
 
 def main():
-    photo = 'camera.jpg'
+    photo = 'lamps.jpg'
     bucket = 'test-rekognition-270726'
     label_count = detect_labels(photo, bucket)
     print("Labels detected:", label_count)
