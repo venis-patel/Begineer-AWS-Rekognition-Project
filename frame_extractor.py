@@ -2,13 +2,9 @@ import os
 import subprocess
 
 def extract_frames(video_path, output_dir, fps=1):
-    # Create output directory if it doesn't exist
     os.makedirs(output_dir, exist_ok=True)
-
-    # names files in the format frame_0001.jpg, frame_0002.jpg, etc.
     output_pattern = os.path.join(output_dir, 'frame_%04d.jpg')
 
-    # Build the FFmpeg command
     command = [
         'ffmpeg',
         '-i', video_path,
@@ -18,11 +14,18 @@ def extract_frames(video_path, output_dir, fps=1):
     ]
 
     try:
-        # Run the command
         subprocess.run(command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         print(f"Successfully extracted frames to {output_dir}")
     except subprocess.CalledProcessError as e:
         print(f"Error during extraction: {e.stderr.decode()}")
 
-# Run the extract frames
-extract_frames('test_video.mp4', 'extracted_frames', fps=1)
+# Resolve paths relative to this script's own directory
+script_dir = os.path.dirname(os.path.abspath(__file__))
+video_path = os.path.join(script_dir, 'test_video.mp4')
+output_dir = os.path.join(script_dir, 'extracted_frames')
+
+# Sanity check before even calling ffmpeg
+if not os.path.isfile(video_path):
+    raise FileNotFoundError(f"Can't find video at: {video_path}")
+
+extract_frames(video_path, output_dir, fps=1)
