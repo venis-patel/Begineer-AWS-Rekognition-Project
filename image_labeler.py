@@ -1,36 +1,30 @@
 import boto3
+import os
+import matplotlib
+matplotlib.use('Agg')  # non-interactive backend — required for saving in a loop without blocking
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from PIL import Image
-from io import BytesIO
 
-def detect_labels(photo, bucket):
-    client = boto3.client('rekognition')
+
+def detect_labels_local(client, image_path, max_labels=10, min_confidence=70):
+    with open(image_path, 'rb') as img_file:
+        image_bytes = img_file.read()
 
     response = client.detect_labels(
-        Image={'S3Object': {'Bucket': bucket, 'Name': photo}},
-        MaxLabels=10)
+        Image={'Bytes': image_bytes},
+        MaxLabels=max_labels,
+        MinConfidence=min_confidence
+    )
+    return response
 
-    print('Detected labels for ' + photo) 
-    print()   
 
-    # Print label information
-    for label in response['Labels']:
-        print("Label:", label['Name'])
-        print("Confidence:", label['Confidence'])
-        print()
+def annotate_and_save(image_path, response, output_path):
+    img = Image.open(image_path)
 
-    # Load the image from S3
-    s3 = boto3.resource('s3')
-    obj = s3.Object(bucket, photo)
-    img_data = obj.get()['Body'].read()
-    img = Image.open(BytesIO(img_data))
+    fig, ax = plt.subplots()
+    ax.imshow(img)
 
-    # Display the image
-    plt.imshow(img)
-    ax = plt.gca()
-
-    # Plot bounding boxes
     for label in response['Labels']:
         for instance in label.get('Instances', []):
             bbox = instance['BoundingBox']
@@ -39,21 +33,57 @@ def detect_labels(photo, bucket):
             width = bbox['Width'] * img.width
             height = bbox['Height'] * img.height
 
-            rect = patches.Rectangle((left, top), width, height, linewidth=1, edgecolor='r', facecolor='none')
+            rect = patches.Rectangle((left, top), width, height,
+                                      linewidth=1, edgecolor='r', facecolor='none')
             ax.add_patch(rect)
 
-            label_text = label['Name'] + ' (' + str(round(label['Confidence'], 2)) + '%)'
-            plt.text(left, top - 2, label_text, color='r', fontsize=8, bbox=dict(facecolor='white', alpha=0.7))
+            label_text = f"{label['Name']} ({round(label['Confidence'], 1)}%)"
+            ax.text(left, max(top - 2, 0), label_text, color='r', fontsize=8,
+                    bbox=dict(facecolor='white', alpha=0.7))
 
-    plt.show()
+    # labels with no bounding box (scene-level, e.g. "Indoors", "Lighting")
+    scene_labels = [l['Name'] for l in response['Labels'] if not l.get('Instances')]
+    if scene_labels:
+        ax.text(5, 15, "Scene: " + ", ".join(scene_labels[:5]),
+                color='blue', fontsize=7, bbox=dict(facecolor='white', alpha=0.7))
 
-    return len(response['Labels'])
+    ax.axis('off')
+    fig.savefig(output_path, bbox_inches='tight', dpi=150)
+    plt.close(fig)  # frees memory — important when processing many frames in a loop
+
+
+def process_frames(input_dir, output_dir, min_confidence=70):
+    os.makedirs(output_dir, exist_ok=True)
+    client = boto3.client('rekognition')
+
+    frame_files = sorted(
+        f for f in os.listdir(input_dir) if f.lower().endswith(('.jpg', '.jpeg', '.png'))
+    )
+
+    for i, filename in enumerate(frame_files, start=1):
+        image_path = os.path.join(input_dir, filename)
+        output_path = os.path.join(output_dir, filename)
+
+        print(f"[{i}/{len(frame_files)}] Processing {filename}...")
+
+        try:
+            response = detect_labels_local(client, image_path, min_confidence=min_confidence)
+            annotate_and_save(image_path, response, output_path)
+
+            label_names = [l['Name'] for l in response['Labels']]
+            print(f"  Labels: {', '.join(label_names) if label_names else 'none'}")
+        except Exception as e:
+            print(f"  Error processing {filename}: {e}")
+
+    print(f"\nDone. Annotated frames saved to {output_dir}")
+
 
 def main():
-    photo = 'lamps.jpg'
-    bucket = 'test-rekognition-270726'
-    label_count = detect_labels(photo, bucket)
-    print("Labels detected:", label_count)
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    input_dir = os.path.join(script_dir, 'extracted_frames')
+    output_dir = os.path.join(script_dir, 'labeled_frames')
+    process_frames(input_dir, output_dir)
+
 
 if __name__ == "__main__":
     main()
