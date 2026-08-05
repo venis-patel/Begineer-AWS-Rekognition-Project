@@ -35,7 +35,7 @@ def remove_images_from_folder(folder_path):
 
 # --- Configuration ---
 # Replace this with the actual path to your folder
-YOUR_FOLDER_PATH = r"" 
+YOUR_FOLDER_PATH = r"C:\Users\Venis\Documents\GitHub Projects\Begineer-AWS-Rekognition-Project\labeled_frames" 
 
 # Execute the function
 remove_images_from_folder(YOUR_FOLDER_PATH)
