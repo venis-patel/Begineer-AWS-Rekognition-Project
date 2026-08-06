@@ -1,0 +1,6 @@
+.env
+*.env
+__pycache__/
+extracted_frames/
+gemini_labeled_frames/
+labeled_frames/
