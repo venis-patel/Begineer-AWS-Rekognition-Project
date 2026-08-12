@@ -22,7 +22,7 @@ from pydantic import BaseModel, Field
 
 import ollama
 
-MODEL = "qwen3-vl:235b-cloud"  # swap for the size that fits your hardware
+MODEL = "qwen3-vl:8b-instruct"  # swap for the size that fits your hardware
 
 PARK_CONTEXT = """You are inspecting playground/park equipment for a council asset audit.
 
@@ -53,15 +53,24 @@ CONDITION_COLORS = {"good": "green", "worn": "orange", "damaged": "red"}
 def detect_park_equipment(image_path, model=MODEL):
     response = ollama.chat(
         model=model,
-        format=DetectionResponse.model_json_schema(),  # constrains output to this schema
+        format=DetectionResponse.model_json_schema(),
         messages=[{
             'role': 'user',
             'content': PARK_CONTEXT,
             'images': [image_path],
         }],
-        options={'temperature': 0},  # more deterministic, more schema-adherent
+        options={'temperature': 0},
     )
-    return DetectionResponse.model_validate_json(response['message']['content'])
+
+    content = response['message']['content']
+
+    if not content:
+        content = response['message'].get('thinking', '')
+
+    if not content:
+        raise ValueError(f"Model returned no content or thinking output for {image_path}")
+
+    return DetectionResponse.model_validate_json(content)
 
 
 def annotate_and_save(image_path, detections, output_path):
